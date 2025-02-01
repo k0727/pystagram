@@ -12,6 +12,30 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 
 from pathlib import Path
 
+# Systems Manager Parameter Store를 사용하기 위한 모듈
+import json
+import boto3
+import os
+import pymysql
+
+pymysql.install_as_MySQLdb()
+
+# AWS Parameter Store에서 DB 설정 가져오기
+def get_database_config():
+    ssm_client = boto3.client('ssm', region_name='ap-northeast-2')  # 원하는 리전으로 변경
+    param_name = "/pystagram/rdb"  # 저장한 Parameter Store 경로
+    try:
+        response = ssm_client.get_parameter(Name=param_name, WithDecryption=True)
+        db_config = json.loads(response['Parameter']['Value'])
+        return db_config
+    except Exception as e:
+        print(f"Error fetching DB config from Parameter Store: {e}")
+        return None
+
+db_config = get_database_config()
+
+###########################################################################
+
 AUTH_USER_MODEL = "users.User"
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -78,11 +102,18 @@ WSGI_APPLICATION = "config.wsgi.application"
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR.parent / "pystagram-db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': db_config.get('NAME', 'default_db'),
+        'USER': db_config.get('USER', 'default_user'),
+        'PASSWORD': db_config.get('PASSWORD', 'default_password'),
+        'HOST': db_config.get('HOST', 'localhost'),
+        'PORT': db_config.get('PORT', '3306'),
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"
+        }
     }
-}
+} if db_config else {}
 
 
 # Password validation
